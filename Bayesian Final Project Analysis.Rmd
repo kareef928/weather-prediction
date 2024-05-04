@@ -38,7 +38,7 @@ for (i in 1:45) {
     y_temp = y_new[, track]
     y_to_consider = as.numeric(y_temp)
     country_name = country_name_list[track]
-    model = glm(y_to_consider~., data=X_to_consider, family="binomial", maxit=1000)
+    model = glm(y_to_consider~., data=X_to_consider, family="binomial", maxit=10000)
     beta_list[[country_name]] <- coef(model)
     track = track + 1
   }
@@ -97,7 +97,7 @@ psd.alpha.beta <- rep(10,p) # prior SD=10/var=100
 
 ```{r}
 prior_alpha_beta <- function(alpha.beta) {
-  return(dnorm(alpha.beta, rep(0, p), rep(10, p), log=T))  
+  return(dnorm(alpha.beta, as.vector(coefs_BASEL), rep(10, p), log=T))  
 }
 
 ## rmvnorm function for proposals
@@ -108,7 +108,8 @@ t( t(E%*%chol(Sigma)) +c(mu))
 }
 
 log_likelihood <- function(y, alpha.beta, x) {
-  p_y_given_theta = y*(alpha.beta[1]+alpha.beta[2:p]*x)-log(1+exp(alpha.beta[1]+alpha.beta[2:p]*x))
+  alpha.beta_2_4 = matrix(rep(alpha.beta[2:p], each = nrow(x)), nrow = nrow(x), byrow = FALSE)
+  p_y_given_theta = y*(alpha.beta[1]+alpha.beta_2_4*x)-log(1+exp(alpha.beta[1]+alpha.beta_2_4*x))
   return(p_y_given_theta)
 }
 
@@ -116,6 +117,28 @@ proposal_alpha_beta <- function(alpha.beta) {
   return(t(rmvnorm(1, alpha.beta, var.prop))) 
 }
 ```
+
+```{r}
+alpha.beta.star = proposal_alpha_beta(as.vector(coefs_BASEL))
+print(as.vector(alpha.beta.star[1:p]))
+print(as.matrix(X_BASEL))
+test = log_likelihood(y_BASEL, alpha.beta.star, X_BASEL)
+print(test)
+```
+
+```{r}
+alpha <- c(1, 2, 3)
+
+# Define the 100x3 matrix beta
+beta <- matrix(1:300, nrow = 100, ncol = 3)
+
+alpha_repeated <- matrix(rep(alpha, each = nrow(beta)), nrow = nrow(beta), byrow = FALSE)
+
+# Perform element-wise multiplication
+result <- alpha_repeated * beta
+result
+```
+
 
 
 ```{r}
@@ -143,8 +166,13 @@ logr <- sum(log_likelihood(y_BASEL, alpha.beta.star, X_BASEL)) + sum(prior_alpha
 - sum(log_likelihood(y_BASEL, alpha.beta, X_BASEL)) - sum(prior_alpha_beta(alpha.beta)) 
 
 print(logr)
-if( log(runif(1)) < logr ) { alpha.beta <- alpha.beta.star; ac <- ac+1 }
-if (s %% R == 0) { ALPHA.BETA[s/R,] <- alpha.beta}
+if( log(runif(1)) < logr ) { 
+  alpha.beta <- alpha.beta.star
+  ac <- ac+1 
+}
+
+if (s %% R == 0) { 
+  ALPHA.BETA[s/R,] <- alpha.beta}
 }
 ACR <- c(ACR,ac/S)
 ACF <- c(ACF,acf(ALPHA.BETA[,1],plot=FALSE)$acf[2])

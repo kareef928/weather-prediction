@@ -13,14 +13,23 @@ inds_to_consider_y = c(2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 18)
 X_new = X[, inds_to_consider_X]
 y_2 = y[, inds_to_consider_y]
 y_3 = as.data.frame(lapply(y_2, function(x) toupper(x)))
-y_new = as.data.frame(lapply(y_3, function(x) as.logical(tolower(x))))
+y_4 = as.data.frame(lapply(y_3, function(x) as.logical(tolower(x))))
+y_new <- as.data.frame(lapply(y_4, function(x) ifelse(x, 1, 0)))
 ```
+
+```{r}
+X_new
+```
+
 
 
 ```{r}
 y_new
 ```
 
+```{r}
+y_4
+```
 
 
 ```{r}
@@ -80,10 +89,11 @@ print(sigma)
 
 ```{r}
 #1: Do Logistic Regression on BASEL
-
+p=4
 X_BASEL = X_new[, 1:3]
 y_BASEL = y_new[, 1]
 glm_BASEL = glm(y_BASEL~., data=X_BASEL, family="binomial", maxit=1000)
+#glm_BASEL = glm(y_BASEL~X_BASEL, family="binomial", maxit=1000)
 coefs_BASEL = glm_BASEL$coefficients
 coefs_BASEL
 ```
@@ -91,13 +101,13 @@ coefs_BASEL
 ```{r}
 n <- length(y)
 #pmn.alpha.beta <- rep(0,p) # prior mean
-pmn.alpha.beta <- as.vector(coefs_BASEL) # prior mean
+pmn.alpha.beta <- rep(0,p) # prior mean
 psd.alpha.beta <- rep(10,p) # prior SD=10/var=100
 ```
 
 ```{r}
 prior_alpha_beta <- function(alpha.beta) {
-  return(dnorm(alpha.beta, as.vector(coefs_BASEL), rep(10, p), log=T))  
+  return(dnorm(alpha.beta, pmn.alpha.beta, psd.alpha.beta, log=T))  
 }
 
 ## rmvnorm function for proposals
@@ -107,39 +117,10 @@ E <- matrix(rnorm(n*length(mu)),n,length(mu))
 t( t(E%*%chol(Sigma)) +c(mu))
 }
 
-log_likelihood <- function(y, alpha.beta, x) {
-  alpha.beta_2_4 = matrix(rep(alpha.beta[2:p], each = nrow(x)), nrow = nrow(x), byrow = FALSE)
-  p_y_given_theta = y*(alpha.beta[1]+alpha.beta_2_4*x)-log(1+exp(alpha.beta[1]+alpha.beta_2_4*x))
-  return(p_y_given_theta)
-}
-
 proposal_alpha_beta <- function(alpha.beta) {
   return(t(rmvnorm(1, alpha.beta, var.prop))) 
 }
 ```
-
-```{r}
-alpha.beta.star = proposal_alpha_beta(as.vector(coefs_BASEL))
-print(as.vector(alpha.beta.star[1:p]))
-print(as.matrix(X_BASEL))
-test = log_likelihood(y_BASEL, alpha.beta.star, X_BASEL)
-print(test)
-```
-
-```{r}
-alpha <- c(1, 2, 3)
-
-# Define the 100x3 matrix beta
-beta <- matrix(1:300, nrow = 100, ncol = 3)
-
-alpha_repeated <- matrix(rep(alpha, each = nrow(beta)), nrow = nrow(beta), byrow = FALSE)
-
-# Perform element-wise multiplication
-result <- alpha_repeated * beta
-result
-```
-
-
 
 ```{r}
 ACR<-NULL
@@ -148,37 +129,124 @@ ACF<-NULL
 delta2 <- 2e-5 #this delta gave us about 18% of the acceptance rate
 #variance-covariance matrix of a proposal distribution
 
-S <- 10
-R = 1
+S <- 1000000
+R = 1000
 ac <- 0
-alpha.beta <- pmn.alpha.beta #initializing the markov chain
+#alpha.beta <- rep(0, p) #initializing the markov chain
+#alpha.beta = rep(0, p)
+alpha.beta = c(-30, -7, -30, 1)
 ALPHA.BETA <- matrix(0,nrow=S/R,ncol=p)
+ALPHA.BETA[1,]=alpha.beta
 var.prop <- diag(delta2, nrow = p, ncol = p)
 set.seed(1)
 
+y=y_BASEL
+x=X_BASEL
+
 ## MCMC
-for(s in 1:S) {
+for(s in 2:S) {
   
 #propose a new alpha.beta
 alpha.beta.star <- proposal_alpha_beta(alpha.beta)
 
-logr <- sum(log_likelihood(y_BASEL, alpha.beta.star, X_BASEL)) + sum(prior_alpha_beta(alpha.beta.star)) 
-- sum(log_likelihood(y_BASEL, alpha.beta, X_BASEL)) - sum(prior_alpha_beta(alpha.beta)) 
+#logr <- sum(log_likelihood(y_BASEL, alpha.beta.star, X_BASEL)) + sum(prior_alpha_beta(alpha.beta.star)) 
+#- sum(log_likelihood(y_BASEL, alpha.beta, X_BASEL)) - sum(prior_alpha_beta(alpha.beta)) 
 
-print(logr)
+logr = sum(y*(alpha.beta.star[1]+alpha.beta.star[2:p]*x)) -
+sum(log(1+exp(alpha.beta.star[1]+alpha.beta.star[2:p]*x))) -
+sum(y*(alpha.beta[1]+alpha.beta[2:p]*x)) +
+sum(log(1+exp(alpha.beta[1]+alpha.beta[2:p]*x))) +
+sum(dnorm(alpha.beta.star,pmn.alpha.beta,psd.alpha.beta,log=T)) -
+sum(dnorm(alpha.beta,pmn.alpha.beta,psd.alpha.beta,log=T))
+
 if( log(runif(1)) < logr ) { 
   alpha.beta <- alpha.beta.star
   ac <- ac+1 
 }
 
 if (s %% R == 0) { 
+  print(s)
   ALPHA.BETA[s/R,] <- alpha.beta}
 }
 ACR <- c(ACR,ac/S)
 ACF <- c(ACF,acf(ALPHA.BETA[,1],plot=FALSE)$acf[2])
 ```
-
 ```{r}
 ACR
+```
+
+
+
+```{r}
+print(ALPHA.BETA)
+```
+
+
+```{r}
+library(coda)
+print("Effective sample size for alphaˆ(s) and betaˆ(s)")
+apply(ALPHA.BETA,2,effectiveSize)
+```
+
+```{r}
+print("Prior means and variances of alpha, beta")
+pmn.alpha.beta
+```
+
+```{r}
+psd.alpha.beta**2
+```
+
+
+```{r}
+print("Posterior mean and variances of alpha, beta")
+apply(ALPHA.BETA,2,mean)
+```
+
+```{r}
+apply(ALPHA.BETA,2,var)
+```
+
+```{r}
+par(mfrow = c(1, 4)) # Set up the layout for side-by-side plots
+# Plot for the first row (ALPHA)
+density_alpha <- density(ALPHA.BETA[,1])
+plot(density_alpha, col = "blue", main = "ALPHA",xlim = c(-5,5))
+lines(density(rnorm(10000000, 0, 10)), col = "red") # Add a reference line
+legend("topright", legend = c("Posterior", "Prior"), col = c("blue", "red"), lty = 1)
+
+# Plot for the second row (BETA 1)
+density_beta_1 <- density(ALPHA.BETA[,2])
+plot(density_beta_1, col = "blue", main = "BETA Humidity",xlim = c(-5,5))
+lines(density(rnorm(10000000, 0, 10)), col = "red") # Add a reference line
+legend("topright", legend = c("Posterior", "Prior"), col = c("blue", "red"), lty = 1)
+
+# Plot for the third row (BETA 2)
+density_beta_2 <- density(ALPHA.BETA[,3])
+plot(density_beta_2, col = "blue", main = "BETA Precipitation",xlim = c(-5,5))
+lines(density(rnorm(10000000, 0, 10)), col = "red") # Add a reference line
+legend("topright", legend = c("Posterior", "Prior"), col = c("blue", "red"), lty = 1)
+
+# Plot for the fourth row (BETA 3)
+density_beta_3 <- density(ALPHA.BETA[,4])
+plot(density_beta_3, col = "blue", main = "BETA Mean Temperature",xlim = c(-5,5))
+lines(density(rnorm(10000000, 0, 10)), col = "red") # Add a reference line
+legend("topright", legend = c("Posterior", "Prior"), col = c("blue", "red"), lty = 1)
+```
+
+```{r}
+#ACF Plots
+par(mfrow = c(1, 4)) # Set up the layout for side-by-side plots
+acf(ALPHA.BETA[,1])
+acf(ALPHA.BETA[,2])
+acf(ALPHA.BETA[,3])
+acf(ALPHA.BETA[,4])
+```
+
+
+```{r}
+#2: Do hierarchical logistic regression on all countries
+
+
 ```
 

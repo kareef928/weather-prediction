@@ -52,10 +52,13 @@ for (i in 1:45) {
     track = track + 1
   }
 }
-
+print(beta_list)
 ```
 ```{r}
-print(beta_list[[1]])
+beta_df = do.call(rbind, beta_list)
+row.names(beta_df) = names(beta_list)
+colnames(beta_df) = c("Intercept", "Humidity", "Precipitation", "Mean Temperature")
+beta_df
 ```
 
 
@@ -63,17 +66,21 @@ print(beta_list[[1]])
 #get the theta list
 p = 4
 J = 15
-theta_list = c()
-for (i in 1:p){
-  sum = 0
-  for (j in 1:J){
-    sum = sum + beta_list[[j]][[i]]
-  }
-  avg = sum/J
-  theta_list = c(theta_list, avg)
-}
+#theta_list = c()
+#for (i in 1:p){
+#  sum = 0
+#  for (j in 1:J){
+#    sum = sum + beta_list[[j]][[i]]
+#  }
+#  avg = sum/J
+#  theta_list = c(theta_list, avg)
+#}
+
+theta_list = apply(beta_df, 2, mean)
 print(theta_list)
 ```
+
+
 
 ```{r}
 #get the variance matrix
@@ -129,12 +136,11 @@ ACF<-NULL
 delta2 <- 2e-5 #this delta gave us about 18% of the acceptance rate
 #variance-covariance matrix of a proposal distribution
 
-S <- 1000000
-R = 1000
+S <- 1000
+R = 10
 ac <- 0
-#alpha.beta <- rep(0, p) #initializing the markov chain
-#alpha.beta = rep(0, p)
-alpha.beta = c(-30, -7, -30, 1)
+alpha.beta <- rep(0, p) #initializing the markov chain
+#alpha.beta = c(-30, -7, -30, 1)
 ALPHA.BETA <- matrix(0,nrow=S/R,ncol=p)
 ALPHA.BETA[1,]=alpha.beta
 var.prop <- diag(delta2, nrow = p, ncol = p)
@@ -168,24 +174,18 @@ if (s %% R == 0) {
   print(s)
   ALPHA.BETA[s/R,] <- alpha.beta}
 }
-ACR <- c(ACR,ac/S)
-ACF <- c(ACF,acf(ALPHA.BETA[,1],plot=FALSE)$acf[2])
+ACR_BASEL <- c(ACR,ac/S)
+ACF_BASEL <- c(ACF,acf(ALPHA.BETA[,1],plot=FALSE)$acf[2])
 ```
 ```{r}
-ACR
-```
-
-
-
-```{r}
-print(ALPHA.BETA)
+ACR_BASEL
 ```
 
 
 ```{r}
 library(coda)
 print("Effective sample size for alphaˆ(s) and betaˆ(s)")
-apply(ALPHA.BETA,2,effectiveSize)
+apply(ALPHA.BETA.BASEL,2,effectiveSize)
 ```
 
 ```{r}
@@ -200,37 +200,37 @@ psd.alpha.beta**2
 
 ```{r}
 print("Posterior mean and variances of alpha, beta")
-apply(ALPHA.BETA,2,mean)
+apply(ALPHA.BETA.BASEL,2,mean)
 ```
 
 ```{r}
-apply(ALPHA.BETA,2,var)
+apply(ALPHA.BETA.BASEL,2,var)
 ```
 
 ```{r}
 par(mfrow = c(1, 4)) # Set up the layout for side-by-side plots
 # Plot for the first row (ALPHA)
-density_alpha <- density(ALPHA.BETA[,1])
-plot(density_alpha, col = "blue", main = "ALPHA",xlim = c(-5,5))
-lines(density(rnorm(10000000, 0, 10)), col = "red") # Add a reference line
+density_alpha <- density(ALPHA.BETA.BASEL[,1])
+plot(density_alpha, col = "blue", main = "BASEL ALPHA",xlim = c(-5,5))
+lines(density(rnorm(S, 0, 10)), col = "red") # Add a reference line
 legend("topright", legend = c("Posterior", "Prior"), col = c("blue", "red"), lty = 1)
 
 # Plot for the second row (BETA 1)
-density_beta_1 <- density(ALPHA.BETA[,2])
-plot(density_beta_1, col = "blue", main = "BETA Humidity",xlim = c(-5,5))
-lines(density(rnorm(10000000, 0, 10)), col = "red") # Add a reference line
+density_beta_1 <- density(ALPHA.BETA.BASEL[,2])
+plot(density_beta_1, col = "blue", main = "BASEL BETA Humidity",xlim = c(-5,5))
+lines(density(rnorm(S, 0, 10)), col = "red") # Add a reference line
 legend("topright", legend = c("Posterior", "Prior"), col = c("blue", "red"), lty = 1)
 
 # Plot for the third row (BETA 2)
-density_beta_2 <- density(ALPHA.BETA[,3])
-plot(density_beta_2, col = "blue", main = "BETA Precipitation",xlim = c(-5,5))
-lines(density(rnorm(10000000, 0, 10)), col = "red") # Add a reference line
+density_beta_2 <- density(ALPHA.BETA.BASEL[,3])
+plot(density_beta_2, col = "blue", main = "BASEL BETA Precipitation",xlim = c(-5,5))
+lines(density(rnorm(S, 0, 10)), col = "red") # Add a reference line
 legend("topright", legend = c("Posterior", "Prior"), col = c("blue", "red"), lty = 1)
 
 # Plot for the fourth row (BETA 3)
-density_beta_3 <- density(ALPHA.BETA[,4])
-plot(density_beta_3, col = "blue", main = "BETA Mean Temperature",xlim = c(-5,5))
-lines(density(rnorm(10000000, 0, 10)), col = "red") # Add a reference line
+density_beta_3 <- density(ALPHA.BETA.BASEL[,4])
+plot(density_beta_3, col = "blue", main = "BASEL BETA Mean Temperature",xlim = c(-5,5))
+lines(density(rnorm(S, 0, 10)), col = "red") # Add a reference line
 legend("topright", legend = c("Posterior", "Prior"), col = c("blue", "red"), lty = 1)
 ```
 
@@ -243,10 +243,58 @@ acf(ALPHA.BETA[,3])
 acf(ALPHA.BETA[,4])
 ```
 
+```{r}
+#Do Regular Logistic Regression on Budapest
+#1: Do Logistic Regression on BASEL
+p=4
+X_BUDAPEST = X_new[, 4:6]
+y_BUDAPEST = y_new[, 2]
+glm_BUDAPEST = glm(y_BUDAPEST~., data=X_BUDAPEST, family="binomial", maxit=1000)
+coefs_BUDAPEST = glm_BUDAPEST$coefficients
+coefs_BUDAPEST
+```
+
+
 
 ```{r}
 #2: Do hierarchical logistic regression on all countries
 
+m = J = 15
+p = 4
 
+mu0 = apply(beta_df, 2, mean)
+S0 = sigma
+eta0 = p+2
+iL0 = solve(S0)
+iSigma = solve(S0)
+delta2 <- 2e-5
+var.prop <- diag(delta2, nrow = p, ncol = p)
 ```
+
+```{r}
+#MCMC
+library(mvtnorm)
+library(MCMCpack)
+library(coda)
+
+THETA.post = NULL
+SIGMA.post = NULL
+set.seed(1)
+for (s in 1:50)
+{
+  
+  #update theta
+  Lm = solve(iL0 + m*iSigma)
+  mum = Lm%*%( iL0%*%mu0 + iSigma%*%apply(beta_df,2,sum) )
+  theta<-t(rmvnorm(1,mum,Lm))
+  
+  #update sigma
+  mtheta<-matrix(theta,m,p,byrow=TRUE)
+  iSigma<-rwish(eta0+m, solve( S0+t(beta_df-mtheta)%*%(beta_df-mtheta)) )
+  
+  #update beta
+  
+}
+```
+
 

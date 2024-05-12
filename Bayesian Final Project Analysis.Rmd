@@ -97,8 +97,8 @@ print(sigma)
 ```{r}
 #1: Do Logistic Regression on BASEL
 p=4
-X_BASEL = X_new[, 1:3]
-y_BASEL = y_new[, 1]
+X_BASEL = X_new[1:731, 1:3]
+y_BASEL = y_new[1:731, 1]
 glm_BASEL = glm(y_BASEL~., data=X_BASEL, family="binomial", maxit=1000)
 #glm_BASEL = glm(y_BASEL~X_BASEL, family="binomial", maxit=1000)
 coefs_BASEL = glm_BASEL$coefficients
@@ -124,25 +124,25 @@ E <- matrix(rnorm(n*length(mu)),n,length(mu))
 t( t(E%*%chol(Sigma)) +c(mu))
 }
 
-proposal_alpha_beta <- function(alpha.beta) {
+proposal_alpha_beta <- function(alpha.beta, var.prop) {
   return(t(rmvnorm(1, alpha.beta, var.prop))) 
 }
 ```
 
 ```{r}
-ACR<-NULL
-ACF<-NULL
+ACR_BASEL<-NULL
+ACF_BASEL<-NULL
 
 delta2 <- 2e-5 #this delta gave us about 18% of the acceptance rate
 #variance-covariance matrix of a proposal distribution
 
-S <- 1000
-R = 10
+S <- 15000000
+R = 15000
 ac <- 0
 alpha.beta <- rep(0, p) #initializing the markov chain
 #alpha.beta = c(-30, -7, -30, 1)
-ALPHA.BETA <- matrix(0,nrow=S/R,ncol=p)
-ALPHA.BETA[1,]=alpha.beta
+ALPHA.BETA.BASEL <- matrix(0,nrow=S/R,ncol=p)
+ALPHA.BETA.BASEL[1,]=alpha.beta
 var.prop <- diag(delta2, nrow = p, ncol = p)
 set.seed(1)
 
@@ -153,7 +153,7 @@ x=X_BASEL
 for(s in 2:S) {
   
 #propose a new alpha.beta
-alpha.beta.star <- proposal_alpha_beta(alpha.beta)
+alpha.beta.star <- proposal_alpha_beta(alpha.beta, var.prop)
 
 #logr <- sum(log_likelihood(y_BASEL, alpha.beta.star, X_BASEL)) + sum(prior_alpha_beta(alpha.beta.star)) 
 #- sum(log_likelihood(y_BASEL, alpha.beta, X_BASEL)) - sum(prior_alpha_beta(alpha.beta)) 
@@ -172,10 +172,10 @@ if( log(runif(1)) < logr ) {
 
 if (s %% R == 0) { 
   print(s)
-  ALPHA.BETA[s/R,] <- alpha.beta}
+  ALPHA.BETA.BASEL[s/R,] <- alpha.beta}
 }
-ACR_BASEL <- c(ACR,ac/S)
-ACF_BASEL <- c(ACF,acf(ALPHA.BETA[,1],plot=FALSE)$acf[2])
+ACR_BASEL <- c(ACR_BASEL,ac/S)
+ACF_BASEL <- c(ACF_BASEL,acf(ALPHA.BETA.BASEL[,1],plot=FALSE)$acf[2])
 ```
 ```{r}
 ACR_BASEL
@@ -237,23 +237,128 @@ legend("topright", legend = c("Posterior", "Prior"), col = c("blue", "red"), lty
 ```{r}
 #ACF Plots
 par(mfrow = c(1, 4)) # Set up the layout for side-by-side plots
-acf(ALPHA.BETA[,1])
-acf(ALPHA.BETA[,2])
-acf(ALPHA.BETA[,3])
-acf(ALPHA.BETA[,4])
+acf(ALPHA.BETA.BASEL[,1])
+acf(ALPHA.BETA.BASEL[,2])
+acf(ALPHA.BETA.BASEL[,3])
+acf(ALPHA.BETA.BASEL[,4])
 ```
 
 ```{r}
 #Do Regular Logistic Regression on Budapest
 #1: Do Logistic Regression on BASEL
 p=4
-X_BUDAPEST = X_new[, 4:6]
-y_BUDAPEST = y_new[, 2]
+X_BUDAPEST = X_new[1:731, 4:6]
+y_BUDAPEST = y_new[1:731, 2]
 glm_BUDAPEST = glm(y_BUDAPEST~., data=X_BUDAPEST, family="binomial", maxit=1000)
 coefs_BUDAPEST = glm_BUDAPEST$coefficients
 coefs_BUDAPEST
 ```
 
+```{r}
+ACR_BUDAPEST<-NULL
+ACF_BUDAPEST<-NULL
+
+delta2 <- 2e-5 #this delta gave us about 18% of the acceptance rate
+#variance-covariance matrix of a proposal distribution
+
+S <- 15000000
+R = 15000
+ac <- 0
+alpha.beta <- rep(0, p) #initializing the markov chain
+#alpha.beta = c(-30, -7, -30, 1)
+ALPHA.BETA.BUDAPEST <- matrix(0,nrow=S/R,ncol=p)
+ALPHA.BETA.BUDAPEST[1,]=alpha.beta
+var.prop <- diag(delta2, nrow = p, ncol = p)
+set.seed(1)
+
+y=y_BUDAPEST
+x=X_BUDAPEST
+
+## MCMC
+for(s in 2:S) {
+  
+#propose a new alpha.beta
+alpha.beta.star <- proposal_alpha_beta(alpha.beta)
+
+#logr <- sum(log_likelihood(y_BASEL, alpha.beta.star, X_BASEL)) + sum(prior_alpha_beta(alpha.beta.star)) 
+#- sum(log_likelihood(y_BASEL, alpha.beta, X_BASEL)) - sum(prior_alpha_beta(alpha.beta)) 
+
+logr = sum(y*(alpha.beta.star[1]+alpha.beta.star[2:p]*x)) -
+sum(log(1+exp(alpha.beta.star[1]+alpha.beta.star[2:p]*x))) -
+sum(y*(alpha.beta[1]+alpha.beta[2:p]*x)) +
+sum(log(1+exp(alpha.beta[1]+alpha.beta[2:p]*x))) +
+sum(dnorm(alpha.beta.star,pmn.alpha.beta,psd.alpha.beta,log=T)) -
+sum(dnorm(alpha.beta,pmn.alpha.beta,psd.alpha.beta,log=T))
+
+if( log(runif(1)) < logr ) { 
+  alpha.beta <- alpha.beta.star
+  ac <- ac+1 
+}
+
+if (s %% R == 0) { 
+  print(s)
+  ALPHA.BETA.BUDAPEST[s/R,] <- alpha.beta}
+}
+ACR_BUDAPEST <- c(ACR_BUDAPEST,ac/S)
+ACF_BUDAPEST <- c(ACF,acf(ALPHA.BETA.BUDAPEST[,1],plot=FALSE)$acf[2])
+```
+
+```{r}
+ACR_BUDAPEST
+```
+
+
+```{r}
+library(coda)
+print("Effective sample size for alphaˆ(s) and betaˆ(s)")
+apply(ALPHA.BETA.BUDAPEST,2,effectiveSize)
+```
+
+```{r}
+print("Posterior mean and variances of alpha, beta")
+apply(ALPHA.BETA.BUDAPEST,2,mean)
+```
+
+```{r}
+apply(ALPHA.BETA.BUDAPEST,2,var)
+```
+
+```{r}
+par(mfrow = c(1, 4)) # Set up the layout for side-by-side plots
+# Plot for the first row (ALPHA)
+density_alpha <- density(ALPHA.BETA.BUDAPEST[,1])
+plot(density_alpha, col = "blue", main = "BUDAPEST ALPHA",xlim = c(-5,5))
+lines(density(rnorm(S, 0, 10)), col = "red") # Add a reference line
+legend("topright", legend = c("Posterior", "Prior"), col = c("blue", "red"), lty = 1)
+
+# Plot for the second row (BETA 1)
+density_beta_1 <- density(ALPHA.BETA.BUDAPEST[,2])
+plot(density_beta_1, col = "blue", main = "BUDAPEST BETA Humidity",xlim = c(-5,5))
+lines(density(rnorm(S, 0, 10)), col = "red") # Add a reference line
+legend("topright", legend = c("Posterior", "Prior"), col = c("blue", "red"), lty = 1)
+
+# Plot for the third row (BETA 2)
+density_beta_2 <- density(ALPHA.BETA.BUDAPEST[,3])
+plot(density_beta_2, col = "blue", main = "BUDAPEST BETA Precipitation",xlim = c(-5,5))
+lines(density(rnorm(S, 0, 10)), col = "red") # Add a reference line
+legend("topright", legend = c("Posterior", "Prior"), col = c("blue", "red"), lty = 1)
+
+# Plot for the fourth row (BETA 3)
+density_beta_3 <- density(ALPHA.BETA.BUDAPEST[,4])
+plot(density_beta_3, col = "blue", main = "BUDAPEST BETA Mean Temperature",xlim = c(-5,5))
+lines(density(rnorm(S, 0, 10)), col = "red") # Add a reference line
+legend("topright", legend = c("Posterior", "Prior"), col = c("blue", "red"), lty = 1)
+```
+
+
+```{r}
+#ACF Plots
+par(mfrow = c(1, 4)) # Set up the layout for side-by-side plots
+acf(ALPHA.BETA.BUDAPEST[,1])
+acf(ALPHA.BETA.BUDAPEST[,2])
+acf(ALPHA.BETA.BUDAPEST[,3])
+acf(ALPHA.BETA.BUDAPEST[,4])
+```
 
 
 ```{r}
@@ -292,9 +397,70 @@ for (s in 1:50)
   mtheta<-matrix(theta,m,p,byrow=TRUE)
   iSigma<-rwish(eta0+m, solve( S0+t(beta_df-mtheta)%*%(beta_df-mtheta)) )
   
-  #update beta
+  #update beta ... :(
   
 }
 ```
 
+```{r}
+
+```
+
+
+```{r}
+#try varying delta and S for BASEL
+ACR_BASEL<-NULL
+ACF_BASEL<-NULL
+
+S <- 10000
+R = 100
+ac <- 0
+alpha.beta <- rep(0, p) #initializing the markov chain
+ALPHA.BETA.BASEL <- matrix(0,nrow=S/R,ncol=p)
+ALPHA.BETA.BASEL[1,]=alpha.beta
+
+set.seed(1)
+
+y=y_BASEL
+x=X_BASEL
+
+for(delta2 in 2^c(-7, -6, -5, -4, -3)){ #this delta gave us about 18% of the acceptance rate
+#variance-covariance matrix of a proposal distribution
+var.prop <- diag(delta2, nrow = p, ncol = p)
+
+## MCMC
+for(s in 2:S) {
+  
+#propose a new alpha.beta
+alpha.beta.star <- proposal_alpha_beta(alpha.beta)
+
+#logr <- sum(log_likelihood(y_BASEL, alpha.beta.star, X_BASEL)) + sum(prior_alpha_beta(alpha.beta.star)) 
+#- sum(log_likelihood(y_BASEL, alpha.beta, X_BASEL)) - sum(prior_alpha_beta(alpha.beta)) 
+
+logr = sum(y*(alpha.beta.star[1]+alpha.beta.star[2:p]*x)) -
+sum(log(1+exp(alpha.beta.star[1]+alpha.beta.star[2:p]*x))) -
+sum(y*(alpha.beta[1]+alpha.beta[2:p]*x)) +
+sum(log(1+exp(alpha.beta[1]+alpha.beta[2:p]*x))) +
+sum(dnorm(alpha.beta.star,pmn.alpha.beta,psd.alpha.beta,log=T)) -
+sum(dnorm(alpha.beta,pmn.alpha.beta,psd.alpha.beta,log=T))
+
+if( log(runif(1)) < logr ) { 
+  alpha.beta <- alpha.beta.star
+  ac <- ac+1 
+}
+
+if (s %% R == 0) { 
+  print(s)
+  ALPHA.BETA.BASEL[s/R,] <- alpha.beta}
+}
+
+ACR_BASEL <- c(ACR_BASEL,ac/S)
+ACF_BASEL <- c(ACF_BASEL,acf(ALPHA.BETA.BASEL[,2],plot=FALSE)$acf[2])
+}
+
+```
+
+```{r}
+plot(ACR_BASEL,ACF_BASEL, main="ACF (lag 1) vs ACR for humidity in BASEL") ; lines(ACR_BASEL,ACF_BASEL)
+```
 
